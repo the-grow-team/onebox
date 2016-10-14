@@ -23,6 +23,10 @@ module Onebox
       ""
     end
 
+    def raw
+      engine.raw
+    end
+
     def options
       OpenStruct.new(@options)
     end
