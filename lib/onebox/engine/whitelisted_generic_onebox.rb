@@ -131,7 +131,13 @@ module Onebox
           wsj.com
           zappos.com
           zillow.com
-          change.org)
+          change.org
+          hbr.org
+          inc.com
+          fastcompany.com
+          insead.edu
+          linkedin.com
+          psychologytoday.com)
       end
 
       # Often using the `html` attribute is not what we want, like for some blogs that
