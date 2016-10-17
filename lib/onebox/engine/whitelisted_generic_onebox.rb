@@ -137,6 +137,9 @@ module Onebox
           fastcompany.com
           insead.edu
           linkedin.com
+          lynda.com
+          skillsoft.com
+          skillport.com
           psychologytoday.com)
       end
 
