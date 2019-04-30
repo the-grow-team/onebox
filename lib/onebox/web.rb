@@ -11,6 +11,11 @@ module Onebox
     set :root, File.expand_path(File.dirname(__FILE__) + "/../../web")
     set :public_folder, Proc.new { "#{root}/assets" }
     set :views, Proc.new { "#{root}/views" }
+    configure :development do
+      register Sinatra::Reloader
+      also_reload 'lib/**/*.rb'
+      enable :logging
+    end
 
     helpers WebHelpers
 

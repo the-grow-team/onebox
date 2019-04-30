@@ -1,3 +1,5 @@
+require 'onebox/oembed'
+
 module Onebox
   module Engine
     class YoutubeOnebox
@@ -7,35 +9,14 @@ module Onebox
       matches_regexp(/^https?:\/\/(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)\/.+$/)
       always_https
 
-      # Try to get the video ID. Works for URLs of the form:
-      # * https://www.youtube.com/watch?v=Z0UISCEe52Y
-      # * http://youtu.be/afyK1HSFfgw
-      # * https://www.youtube.com/embed/vsF0K3Ou1v0
-      def video_id
-        if uri.host =~ /youtu.be/
-          # A slash, then capture all non-slash characters remaining
-          match = uri.path.match(/\/([^\/]+)/)
-          return match[1] if match && match[1]
-        end
-
-        if uri.path =~ /\/embed\//
-          # A slash, then embed, then another slash, then capture all remaining non-slash characters
-          match = uri.path.match(/\/embed\/([^\/]+)/)
-          return match[1] if match && match[1]
-        end
-
-        if params['v']
-          return params['v']
-        end
-
-        nil
-      rescue
-        return nil
-      end
+      WIDTH  ||= 480
+      HEIGHT ||= 360
 
       def placeholder_html
         if video_id
-          "<img src='https://i1.ytimg.com/vi/#{video_id}/hqdefault.jpg' width='480' height='270'>"
+          "<img src='https://i.ytimg.com/vi/#{video_id}/hqdefault.jpg' width='#{WIDTH}' height='#{HEIGHT}' #{video_oembed_data.title_attr}>"
+        elsif list_id
+          "<img src='#{list_thumbnail_url}' width='#{WIDTH}' height='#{HEIGHT}' #{list_oembed_data.title_attr}>"
         else
           to_html
         end
@@ -43,79 +24,120 @@ module Onebox
 
       def to_html
         if video_id
-          # Avoid making HTTP requests if we are able to get the video ID from the
-          # URL.
-          html = "<iframe width=\"480\" height=\"270\" src=\"https://www.youtube.com/embed/#{video_id}?#{embed_params}\" frameborder=\"0\" allowfullscreen></iframe>"
-        elsif params['list']
-          # YouTube Playlist URL (https://www.youtube.com/playlist?list=PLBsP89CPrMeOwWHwmD6FzkKIca-GjAD_f)
-          # in case of cast_sender.js console errors, see: http://stackoverflow.com/q/25814914
-          html = "<iframe width=\"480\" height=\"270\" src=\"https://www.youtube.com/embed/videoseries?list=#{params['list']}&wmode=transparent&rel=0&autohide=1&showinfo=1&enablejsapi=1\" frameborder=\"0\" allowfullscreen></iframe>"
+          <<-HTML
+            <iframe width="#{WIDTH}"
+                    height="#{HEIGHT}"
+                    src="https://www.youtube.com/embed/#{video_id}?#{embed_params}"
+                    frameborder="0"
+                    allowfullscreen>
+            </iframe>
+          HTML
+        elsif list_id
+          <<-HTML
+            <iframe width="#{WIDTH}"
+                    height="#{HEIGHT}"
+                    src="https://www.youtube.com/embed/videoseries?list=#{list_id}&wmode=transparent&rel=0&autohide=1&showinfo=1&enablejsapi=1"
+                    frameborder="0"
+                    allowfullscreen>
+            </iframe>
+          HTML
         else
           # for channel pages
           html = Onebox::Engine::WhitelistedGenericOnebox.new(@url, @cache, @timeout).to_html
-          return nil unless html
-          html = html.gsub /http:/, 'https:'
-          html = html.gsub /"\/\//, '"https://'
-          html = html.gsub /'\/\//, "'https://"
+          return if Onebox::Helpers.blank?(html)
+          html.gsub!(/['"]\/\//, "https://")
+          html
         end
-
-        html
       end
 
       def video_title
-        yt_oembed_url = "https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=#{video_id.split('?')[0]}"
-        yt_oembed_data = Onebox::Helpers.symbolize_keys(::MultiJson.load(Onebox::Helpers.fetch_response(yt_oembed_url).body))
-        yt_oembed_data[:title]
-      rescue
-        return nil
-      end
-
-      # Regex to parse strings like "1h3m2s". Also accepts bare numbers (which are seconds).
-      TIMESTR_REGEX = /(\d+h)?(\d+m)?(\d+s?)?/
-
-      def embed_params
-        p = {'feature' => 'oembed', 'wmode' => 'opaque'}
-
-        p['list'] = params['list'] if params['list']
-
-        # Parse timestrings, and assign the result as a start= parameter
-        start = nil
-        if params['start']
-          start = params['start']
-        elsif params['t']
-          start = params['t']
-        elsif uri.fragment && uri.fragment.start_with?('t=')
-          # referencing uri is safe here because any throws were already caught by video_id returning nil
-          # remove the t= from the start
-          start = uri.fragment[2..-1]
-        end
-        p['start'] = parse_timestring(start) if start
-        p['end'] = parse_timestring params['end'] if params['end']
-
-        # Official workaround for looping videos
-        # https://developers.google.com/youtube/player_parameters#loop
-        # use params.include? so that you can just add "&loop"
-        if params.include? 'loop'
-          p['loop'] = 1
-          p['playlist'] = video_id
-        end
-
-        URI.encode_www_form(p)
+        @video_title ||= video_oembed_data.title
       end
 
       private
 
-      # Takes a timestring and returns the number of seconds it represents.
-      def parse_timestring(string)
-        tm = string.match TIMESTR_REGEX
-        if tm && !tm[0].empty?
-          h = tm[1].to_i
-          m = tm[2].to_i
-          s = tm[3].to_i
+      def video_id
+        @video_id ||= begin
+          # http://youtu.be/afyK1HSFfgw
+          if uri.host["youtu.be"]
+            id = uri.path[/\/([\w\-]+)/, 1]
+            return id if id
+          end
 
-          (h * 60 * 60) + (m * 60) + s
-        else
+          # https://www.youtube.com/embed/vsF0K3Ou1v0
+          if uri.path["/embed/"]
+            id = uri.path[/\/embed\/([\w\-]+)/, 1]
+            return id if id
+          end
+
+          # https://www.youtube.com/watch?v=Z0UISCEe52Y
+          params['v']
+        end
+      end
+
+      def list_id
+        @list_id ||= params['list']
+      end
+
+      def list_thumbnail_url
+        @list_thumbnail_url ||= begin
+          url = "https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/playlist?list=#{list_id}"
+          response = Onebox::Helpers.fetch_response(url) rescue "{}"
+          data = Onebox::Oembed.new(response)
+          data.thumbnail_url
+        rescue
           nil
+        end
+      end
+
+      def video_oembed_data
+        url = "https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=#{video_id}"
+        response = Onebox::Helpers.fetch_response(url) rescue "{}"
+        Onebox::Oembed.new(response)
+      end
+
+      def list_oembed_data
+        url = "https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/playlist?list=#{list_id}"
+        response = Onebox::Helpers.fetch_response(url) rescue "{}"
+        Onebox::Oembed.new(response)
+      end
+
+      def embed_params
+        p = { 'feature' => 'oembed', 'wmode' => 'opaque' }
+
+        p['list'] = list_id if list_id
+
+        # Parse timestrings, and assign the result as a start= parameter
+        start = if params['start']
+          params['start']
+        elsif params['t']
+          params['t']
+        elsif uri.fragment && uri.fragment.start_with?('t=')
+          # referencing uri is safe here because any throws were already caught by video_id returning nil
+          # remove the t= from the start
+          uri.fragment[2..-1]
+        end
+
+        p['start'] = parse_timestring(start)        if start
+        p['end']   = parse_timestring params['end'] if params['end']
+
+        # Official workaround for looping videos
+        # https://developers.google.com/youtube/player_parameters#loop
+        # use params.include? so that you can just add "&loop"
+        if params.include?('loop')
+          p['loop'] = 1
+          p['playlist'] = video_id
+        end
+
+        # https://developers.google.com/youtube/player_parameters#rel
+        p['rel'] = 0 if params.include?('rel')
+
+        URI.encode_www_form(p)
+      end
+
+      def parse_timestring(string)
+        if string =~ /(\d+h)?(\d+m)?(\d+s?)?/
+          ($1.to_i * 3600) + ($2.to_i * 60) + $3.to_i
         end
       end
 
@@ -127,15 +149,13 @@ module Onebox
         # if one day it suddenly gave you an array.
         #
         # However, we aren't interested. Just take the first one.
-        @_params ||= begin
-                       params = {}
-                       CGI.parse(uri.query).each do |k, v|
-                         params[k] = v.first
-                       end
-                       params
+        @params ||= begin
+          p = {}
+          CGI.parse(uri.query).each { |k, v| p[k] = v.first }
+          p
         end
       rescue
-        return {}
+        {}
       end
 
     end

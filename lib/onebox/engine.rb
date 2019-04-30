@@ -21,17 +21,12 @@ module Onebox
 
     def options=(opt)
       return @options if opt.nil? #make sure options provided
-      if opt.instance_of? OpenStruct
-        @options = @options.merge(opt.to_h)
-      else
-       @options =  @options.merge(opt)
-      end
+      opt = opt.to_h  if opt.instance_of?(OpenStruct)
+      @options.merge!(opt)
       @options
     end
 
-
     def initialize(link, cache = nil, timeout = nil)
-
       @options = DEFAULT
       class_name = self.class.name.split("::").last.to_s
       self.options = Onebox.options[class_name] || {} #Set the engine options extracted from global options.
@@ -46,8 +41,8 @@ module Onebox
       @timeout = timeout || Onebox.options.timeout
     end
 
-    # raises error if not defined in onebox engine. This is the output method for
-    # an engine.
+    # raises error if not defined in onebox engine.
+    # This is the output method for an engine.
     def to_html
       fail NoMethodError, "Engines need to implement this method"
     end
@@ -86,13 +81,12 @@ module Onebox
     end
 
     def link
-      @url.gsub(/['\"&<>]/, {
+      @url.gsub(/['\"<>]/,
         "'" => '&#39;',
-        '&' => '&amp;',
         '"' => '&quot;',
         '<' => '&lt;',
         '>' => '&gt;',
-      })
+      )
     end
 
     def always_https?
@@ -153,6 +147,7 @@ require_relative "engine/video_onebox"
 require_relative "engine/audio_onebox"
 require_relative "engine/stack_exchange_onebox"
 require_relative "engine/twitter_status_onebox"
+require_relative "engine/wikimedia_onebox"
 require_relative "engine/wikipedia_onebox"
 require_relative "engine/youtube_onebox"
 require_relative "engine/youku_onebox"
@@ -161,6 +156,36 @@ require_relative "engine/whitelisted_generic_onebox"
 require_relative "engine/pubmed_onebox"
 require_relative "engine/soundcloud_onebox"
 require_relative "engine/imgur_onebox"
-require_relative "engine/steam_store_widget_onebox"
 require_relative "engine/pastebin_onebox"
 require_relative "engine/slides_onebox"
+require_relative "engine/xkcd_onebox"
+require_relative "engine/giphy_onebox"
+require_relative "engine/gfycat_onebox"
+require_relative "engine/typeform_onebox"
+require_relative "engine/vimeo_onebox"
+require_relative "engine/steam_store_onebox"
+require_relative "engine/sketchfab_onebox"
+require_relative "engine/audioboom_onebox"
+require_relative "engine/replit_onebox"
+require_relative "engine/asciinema_onebox"
+require_relative "engine/mixcloud_onebox"
+require_relative "engine/bandcamp_onebox"
+require_relative "engine/coub_onebox"
+require_relative "engine/flickr_onebox"
+require_relative "engine/flickr_shortened_onebox"
+require_relative "engine/five_hundred_px_onebox"
+require_relative "engine/pdf_onebox"
+require_relative "engine/twitch_clips_onebox"
+require_relative "engine/twitch_stream_onebox"
+require_relative "engine/twitch_video_onebox"
+require_relative "engine/trello_onebox"
+require_relative "engine/wechat_mp_onebox"
+require_relative "engine/cloudapp_onebox"
+require_relative "engine/wistia_onebox"
+require_relative "engine/simplecast_onebox"
+require_relative "engine/instagram_onebox"
+require_relative "engine/gitlab_blob_onebox"
+require_relative "engine/google_photos_onebox"
+require_relative "engine/kaltura_onebox"
+require_relative "engine/reddit_image_onebox"
+require_relative "engine/google_drive_onebox"

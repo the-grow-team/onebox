@@ -20,7 +20,7 @@ module Onebox
       end
 
       @md5 = Digest::MD5.new
-      @view = View.new(name, record)
+      @view = View.new(name, @record)
       @template_name = "_layout"
       @template_path = load_paths.last
     end
@@ -37,50 +37,30 @@ module Onebox
       @uri = URI(link)
     end
 
-
     def checksum
       @md5.hexdigest("#{VERSION}:#{link}")
     end
 
     def link
-      record[:link]
+      ::Onebox::Helpers.normalize_url_for_output(record[:link])
     end
 
     def domain
-      return record[:domain] if record[:domain]
-      URI(link || '').host
-    end
-
-    def repository_path
-      record[:repository_path]
-    end
-
-    def twitter_label1
-      record[:twitter_label1]
-    end
-
-    def twitter_data1
-      record[:twitter_data1]
-    end
-
-    def twitter_label2
-      record[:twitter_label2]
-    end
-
-    def twitter_data2
-      record[:twitter_data2]
+      record[:domain] || URI(link || '').host.to_s.sub(/^www\./, '')
     end
 
     def details
       {
         link: record[:link],
         title: record[:title],
+        favicon: record[:favicon],
         domain: domain,
-        repository_path: repository_path,
-        twitter_label1: record[:twitter_label1],
-        twitter_data1: record[:twitter_data1],
-        twitter_label2: record[:twitter_label2],
-        twitter_data2: record[:twitter_data2],
+        article_published_time: record[:article_published_time],
+        article_published_time_title: record[:article_published_time_title],
+        metadata_1_label: record[:metadata_1_label],
+        metadata_1_value: record[:metadata_1_value],
+        metadata_2_label: record[:metadata_2_label],
+        metadata_2_value: record[:metadata_2_value],
         subname: view.template_name,
         view: view.to_html
       }

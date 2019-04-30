@@ -4,31 +4,28 @@ module Onebox
       include Engine
       include StandardEmbed
 
-      matches_regexp(/^https?:\/\/.*soundcloud\.com/)
+      matches_regexp(/^https?:\/\/soundcloud\.com/)
       always_https
 
       def to_html
-        oembed_data = get_oembed_data[:html]
-        oembed_data.gsub!('visual=true', 'visual=false') || oembed_data
+        oembed = get_oembed
+        oembed.html.gsub('visual=true', 'visual=false')
       end
 
       def placeholder_html
-        "<img src='#{get_oembed_data[:thumbnail_url]}'>"
+        oembed = get_oembed
+        return if Onebox::Helpers.blank?(oembed.thumbnail_url)
+        "<img src='#{oembed.thumbnail_url}' #{oembed.title_attr}>"
       end
 
-      private
+      protected
 
-      def set?
-        url =~ /\/sets\//
+      def get_oembed_url
+        oembed_url = "https://soundcloud.com/oembed.json?url=#{url}"
+        oembed_url << "&maxheight=166" unless url["/sets/"]
+        oembed_url
       end
 
-      def get_oembed_data
-        if set?
-          Onebox::Helpers.symbolize_keys(::MultiJson.load(Onebox::Helpers.fetch_response("https://soundcloud.com/oembed.json?url=#{url}").body))
-        else
-          Onebox::Helpers.symbolize_keys(::MultiJson.load(Onebox::Helpers.fetch_response("https://soundcloud.com/oembed.json?url=#{url}&maxheight=166").body))
-        end
-      end
     end
   end
 end
